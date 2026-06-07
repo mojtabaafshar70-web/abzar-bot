@@ -2,9 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import logging
-import json
 import re
-from datetime import datetime, timedelta
+import asyncio
 import jdatetime
 import gspread
 from google.oauth2.service_account import Credentials
@@ -34,29 +33,28 @@ SERVICE_ACCOUNT_INFO = {
   "universe_domain": "googleapis.com"
 }
 
-# ==================== لاگ ====================
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ==================== گوگل شیت ====================
 def get_sheets():
     scopes = ['https://www.googleapis.com/auth/spreadsheets']
     creds = Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=scopes)
     client = gspread.authorize(creds)
-    spreadsheet = client.open_by_key(SPREADSHEET_ID)
-    return spreadsheet
+    return client.open_by_key(SPREADSHEET_ID)
 
-def get_shamsi_date():
+def get_shamsi():
     now = jdatetime.datetime.now()
     return now.strftime("%Y/%m/%d"), now.strftime("%H:%M")
 
-def format_price(price):
-    return f"{int(price):,}"
+def fp(price):
+    try:
+        return f"{int(price):,}"
+    except:
+        return str(price)
 
-# ==================== موجودی ====================
-def find_item(sheet_mojoodi, name):
-    records = sheet_mojoodi.get_all_values()
-    for i, row in enumerate(records[1:], start=2):
+def find_item(sh, name):
+    rows = sh.get_all_values()
+    for i, row in enumerate(rows[1:], start=2):
         if row and row[0].strip() == name.strip():
             return i, row
     return None, None
@@ -64,16 +62,15 @@ def find_item(sheet_mojoodi, name):
 def add_or_update_item(name, price):
     sp = get_sheets()
     sh = sp.worksheet(SHEET_MOJOODI)
-    date_str, _ = get_shamsi_date()
+    date_str, _ = get_shamsi()
     row_num, existing = find_item(sh, name)
-    
     if existing:
+        old_price = existing[1] if len(existing) > 1 else 0
         sh.update_cell(row_num, 2, price)
         sh.update_cell(row_num, 4, date_str)
-        return "update", existing[1] if len(existing) > 1 else 0
+        return "update", old_price
     else:
-        new_row = [name, price, 0, date_str, ""]
-        sh.append_row(new_row)
+        sh.append_row([name, price, 0, date_str, ""])
         return "new", 0
 
 def get_item_price(name):
@@ -87,39 +84,33 @@ def get_item_price(name):
             return 0
     return 0
 
-# ==================== فروش ====================
 def add_sale(name, count, sell_price):
     sp = get_sheets()
-    sh_forosh = sp.worksheet(SHEET_FOROSH)
-    date_str, time_str = get_shamsi_date()
+    sh = sp.worksheet(SHEET_FOROSH)
+    date_str, time_str = get_shamsi()
     buy_price = get_item_price(name)
     profit = (sell_price - buy_price) * count
-    new_row = [name, count, date_str + " " + time_str, buy_price, sell_price, profit]
-    sh_forosh.append_row(new_row)
+    sh.append_row([name, count, date_str + " " + time_str, buy_price, sell_price, profit])
     return buy_price, profit
 
-# ==================== هزینه ====================
-def add_expense(expense_type, amount, description=""):
+def add_expense(label, amount):
     sp = get_sheets()
     sh = sp.worksheet(SHEET_HAZINE)
-    date_str, _ = get_shamsi_date()
-    new_row = [expense_type, date_str, amount, description]
-    sh.append_row(new_row)
+    date_str, _ = get_shamsi()
+    sh.append_row([label, date_str, amount, ""])
 
-# ==================== گزارش ====================
 def get_report(period="روزانه"):
     sp = get_sheets()
     sh_forosh = sp.worksheet(SHEET_FOROSH)
     sh_hazine = sp.worksheet(SHEET_HAZINE)
-    
     today = jdatetime.date.today()
-    
+
     if period == "روزانه":
         start_date = today
         title = f"گزارش روزانه - {today.strftime('%Y/%m/%d')}"
     elif period == "هفتگی":
         start_date = today - jdatetime.timedelta(days=7)
-        title = f"گزارش هفتگی - {start_date.strftime('%Y/%m/%d')} تا {today.strftime('%Y/%m/%d')}"
+        title = f"گزارش هفتگی"
     else:
         start_date = today.replace(day=1)
         title = f"گزارش ماهانه - {today.strftime('%Y/%m')}"
@@ -129,35 +120,30 @@ def get_report(period="روزانه"):
 
     filtered_sales = []
     for row in sales:
-        if not row or not row[0]:
-            continue
+        if not row or not row[0]: continue
         try:
-            date_part = str(row[2]).split(" ")[0] if len(row) > 2 else ""
+            date_part = str(row[2]).split(" ")[0]
             parts = date_part.split("/")
             if len(parts) == 3:
-                row_date = jdatetime.date(int(parts[0]), int(parts[1]), int(parts[2]))
-                if row_date >= start_date:
+                rd = jdatetime.date(int(parts[0]), int(parts[1]), int(parts[2]))
+                if rd >= start_date:
                     filtered_sales.append(row)
-        except:
-            continue
+        except: continue
 
     filtered_expenses = []
     for row in expenses:
-        if not row or not row[0]:
-            continue
+        if not row or not row[0]: continue
         try:
-            date_part = str(row[1]) if len(row) > 1 else ""
-            parts = date_part.split("/")
+            parts = str(row[1]).split("/")
             if len(parts) == 3:
-                row_date = jdatetime.date(int(parts[0]), int(parts[1]), int(parts[2]))
-                if row_date >= start_date:
+                rd = jdatetime.date(int(parts[0]), int(parts[1]), int(parts[2]))
+                if rd >= start_date:
                     filtered_expenses.append(row)
-        except:
-            continue
+        except: continue
 
     total_revenue = 0
     total_profit = 0
-    items_summary = {}
+    items = {}
 
     for row in filtered_sales:
         try:
@@ -165,78 +151,57 @@ def get_report(period="روزانه"):
             count = int(str(row[1]).replace(',', ''))
             sell_price = int(str(row[4]).replace(',', ''))
             profit = int(str(row[5]).replace(',', ''))
+            buy = int(str(row[3]).replace(',', ''))
             revenue = sell_price * count
             total_revenue += revenue
             total_profit += profit
-            if name not in items_summary:
-                items_summary[name] = {"count": 0, "revenue": 0, "profit": 0, "buy": int(str(row[3]).replace(',', '')), "sell": sell_price}
-            items_summary[name]["count"] += count
-            items_summary[name]["revenue"] += revenue
-            items_summary[name]["profit"] += profit
-        except:
-            continue
+            if name not in items:
+                items[name] = {"count": 0, "revenue": 0, "profit": 0, "buy": buy, "sell": sell_price}
+            items[name]["count"] += count
+            items[name]["revenue"] += revenue
+            items[name]["profit"] += profit
+        except: continue
 
-    total_expenses = sum(int(str(r[2]).replace(',', '')) for r in filtered_expenses if len(r) > 2 and r[2])
-    net_profit = total_profit - total_expenses
+    total_exp = 0
+    for r in filtered_expenses:
+        try:
+            total_exp += int(str(r[2]).replace(',', ''))
+        except: continue
 
-    lines = [f"📊 *{title}*\n"]
-    lines.append("━━━━━━━━━━━━━━━━")
-    lines.append("🛒 *فروش‌ها:*\n")
+    net = total_profit - total_exp
 
-    for name, data in items_summary.items():
+    if not items:
+        return f"📊 *{title}*\n\nدر این بازه هیچ فروشی ثبت نشده."
+
+    lines = [f"📊 *{title}*\n━━━━━━━━━━━━━━━━\n🛒 *فروش‌ها:*\n"]
+    for name, d in items.items():
         lines.append(f"▪️ *{name}*")
-        lines.append(f"   تعداد: {data['count']} عدد")
-        lines.append(f"   قیمت خرید: {format_price(data['buy'])} تومان")
-        lines.append(f"   قیمت فروش: {format_price(data['sell'])} تومان")
-        lines.append(f"   سود: {format_price(data['profit'])} تومان\n")
+        lines.append(f"   تعداد: {d['count']} عدد")
+        lines.append(f"   خرید: {fp(d['buy'])} | فروش: {fp(d['sell'])}")
+        lines.append(f"   سود: {fp(d['profit'])} تومان\n")
 
     lines.append("━━━━━━━━━━━━━━━━")
-    lines.append(f"💰 *فروش کل:* {format_price(total_revenue)} تومان")
-    lines.append(f"📈 *مجموع سود فروش:* {format_price(total_profit)} تومان")
-
+    lines.append(f"💰 فروش کل: {fp(total_revenue)} تومان")
+    lines.append(f"📈 مجموع سود: {fp(total_profit)} تومان")
     if filtered_expenses:
-        lines.append(f"\n💸 *هزینه‌ها:*")
-        for row in filtered_expenses:
-            lines.append(f"   • {row[0]}: {format_price(int(str(row[2]).replace(',','')))} تومان")
-        lines.append(f"📉 *مجموع هزینه‌ها:* {format_price(total_expenses)} تومان")
-
-    lines.append("━━━━━━━━━━━━━━━━")
-    emoji = "✅" if net_profit >= 0 else "❌"
-    lines.append(f"{emoji} *سود خالص:* {format_price(net_profit)} تومان")
-
-    if not items_summary:
-        return f"📊 *{title}*\n\nدر این بازه هیچ فروشی ثبت نشده است."
-
+        lines.append(f"💸 هزینه‌ها: {fp(total_exp)} تومان")
+    lines.append(f"━━━━━━━━━━━━━━━━")
+    emoji = "✅" if net >= 0 else "❌"
+    lines.append(f"{emoji} *سود خالص: {fp(net)} تومان*")
     return "\n".join(lines)
 
-# ==================== پردازش پیام ====================
-def parse_message(text):
+def parse_msg(text):
     text = text.strip()
+    if "گزارش روزانه" in text: return ("report", "روزانه")
+    if "گزارش هفتگی" in text: return ("report", "هفتگی")
+    if "گزارش ماهانه" in text: return ("report", "ماهانه")
 
-    # گزارش
-    if "گزارش روزانه" in text:
-        return ("report", "روزانه")
-    if "گزارش هفتگی" in text:
-        return ("report", "هفتگی")
-    if "گزارش ماهانه" in text:
-        return ("report", "ماهانه")
-
-    # تغییر قیمت: قیمت دریل 2800000
     m = re.match(r'^قیمت\s+(.+?)\s+([\d,]+)$', text)
-    if m:
-        name = m.group(1).strip()
-        price = int(m.group(2).replace(',', ''))
-        return ("update_price", name, price)
+    if m: return ("update_price", m.group(1).strip(), int(m.group(2).replace(',', '')))
 
-    # ثبت فروش: فروش دریل 2 عدد 3500000
     m = re.match(r'^فروش\s+(.+?)\s+(\d+)\s*عدد\s+([\d,]+)$', text)
-    if m:
-        name = m.group(1).strip()
-        count = int(m.group(2))
-        price = int(m.group(3).replace(',', ''))
-        return ("sale", name, count, price)
+    if m: return ("sale", m.group(1).strip(), int(m.group(2)), int(m.group(3).replace(',', '')))
 
-    # ثبت هزینه: کرایه بار 500000 یا هزینه xxx 300000
     m = re.match(r'^(.+?)\s+([\d,]+)$', text)
     if m:
         label = m.group(1).strip()
@@ -244,85 +209,73 @@ def parse_message(text):
         keywords = ["هزینه", "کرایه", "اجاره", "برق", "آب", "گاز", "تلفن", "بیمه", "مالیات", "حقوق", "تعمیر"]
         if any(k in label for k in keywords):
             return ("expense", label, amount)
-        # ثبت کالا: دریل 2500000
         return ("item", label, amount)
 
     return ("unknown",)
 
-# ==================== هندلر اصلی ====================
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != AUTHORIZED_USER_ID:
-        await update.message.reply_text("⛔ شما مجاز به استفاده از این ربات نیستید.")
+    if update.effective_user.id != AUTHORIZED_USER_ID:
+        await update.message.reply_text("⛔ دسترسی ندارید.")
         return
-
     text = update.message.text
-    if not text:
-        return
+    if not text: return
 
     try:
-        result = parse_message(text)
+        result = parse_msg(text)
         action = result[0]
 
         if action == "item":
             name, price = result[1], result[2]
-            status, old_price = add_or_update_item(name, price)
+            status, old = add_or_update_item(name, price)
             if status == "new":
-                msg = f"✅ *کالای جدید ثبت شد*\n\n📦 نام: {name}\n💰 قیمت خرید: {format_price(price)} تومان"
+                msg = f"✅ *کالای جدید ثبت شد*\n📦 {name}\n💰 قیمت خرید: {fp(price)} تومان"
             else:
-                msg = f"✅ *قیمت کالا بروزرسانی شد*\n\n📦 نام: {name}\n💰 قیمت قبلی: {format_price(old_price)} تومان\n💰 قیمت جدید: {format_price(price)} تومان"
+                msg = f"✅ *قیمت بروزرسانی شد*\n📦 {name}\n💰 قیمت جدید: {fp(price)} تومان"
             await update.message.reply_text(msg, parse_mode='Markdown')
 
         elif action == "update_price":
             name, price = result[1], result[2]
-            status, old_price = add_or_update_item(name, price)
-            msg = f"✅ *قیمت بروزرسانی شد*\n\n📦 نام: {name}\n💰 قیمت جدید: {format_price(price)} تومان"
-            await update.message.reply_text(msg, parse_mode='Markdown')
+            add_or_update_item(name, price)
+            await update.message.reply_text(f"✅ *قیمت بروزرسانی شد*\n📦 {name}\n💰 {fp(price)} تومان", parse_mode='Markdown')
 
         elif action == "sale":
             name, count, sell_price = result[1], result[2], result[3]
             buy_price, profit = add_sale(name, count, sell_price)
-            msg = (f"✅ *فروش ثبت شد*\n\n"
-                   f"📦 کالا: {name}\n"
-                   f"🔢 تعداد: {count} عدد\n"
-                   f"💰 قیمت خرید: {format_price(buy_price)} تومان\n"
-                   f"💵 قیمت فروش: {format_price(sell_price)} تومان\n"
-                   f"📈 سود این فروش: {format_price(profit)} تومان")
+            msg = (f"✅ *فروش ثبت شد*\n📦 {name}\n🔢 {count} عدد\n"
+                   f"💰 خرید: {fp(buy_price)} | فروش: {fp(sell_price)}\n"
+                   f"📈 سود: {fp(profit)} تومان")
             await update.message.reply_text(msg, parse_mode='Markdown')
 
         elif action == "expense":
             label, amount = result[1], result[2]
             add_expense(label, amount)
-            msg = f"✅ *هزینه ثبت شد*\n\n📝 نوع: {label}\n💸 مبلغ: {format_price(amount)} تومان"
-            await update.message.reply_text(msg, parse_mode='Markdown')
+            await update.message.reply_text(f"✅ *هزینه ثبت شد*\n📝 {label}\n💸 {fp(amount)} تومان", parse_mode='Markdown')
 
         elif action == "report":
-            period = result[1]
             await update.message.reply_text("⏳ در حال تهیه گزارش...")
-            report = get_report(period)
+            report = get_report(result[1])
             await update.message.reply_text(report, parse_mode='Markdown')
 
         else:
             help_text = (
-                "❓ *راهنمای دستورات:*\n\n"
-                "📦 *ثبت کالا:*\n`دریل 2500000`\n\n"
-                "✏️ *تغییر قیمت:*\n`قیمت دریل 2800000`\n\n"
-                "🛒 *ثبت فروش:*\n`فروش دریل 2 عدد 3500000`\n\n"
-                "💸 *ثبت هزینه:*\n`کرایه بار 500000`\n\n"
-                "📊 *گزارش‌ها:*\n`گزارش روزانه`\n`گزارش هفتگی`\n`گزارش ماهانه`"
+                "❓ *راهنما:*\n\n"
+                "📦 ثبت کالا: `دریل 2500000`\n"
+                "✏️ تغییر قیمت: `قیمت دریل 2800000`\n"
+                "🛒 ثبت فروش: `فروش دریل 2 عدد 3500000`\n"
+                "💸 ثبت هزینه: `کرایه بار 500000`\n"
+                "📊 گزارش: `گزارش روزانه` | `گزارش هفتگی` | `گزارش ماهانه`"
             )
             await update.message.reply_text(help_text, parse_mode='Markdown')
 
     except Exception as e:
-        logger.error(f"Error: {e}")
-        await update.message.reply_text(f"⚠️ خطا: {str(e)}\n\nلطفاً دوباره امتحان کنید.")
+        logger.error(f"Error: {e}", exc_info=True)
+        await update.message.reply_text(f"⚠️ خطا رخ داد. دوباره امتحان کنید.\n{str(e)}")
 
-# ==================== اجرا ====================
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     logger.info("ربات شروع به کار کرد...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
     main()
