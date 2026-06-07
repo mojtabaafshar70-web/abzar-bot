@@ -89,6 +89,23 @@ def add_sale(name, count, sell_price):
     sh.append_row([name, count, date_str + " " + time_str, buy_price, sell_price, profit])
     return buy_price, profit
 
+def delete_sale(name, count):
+    sp = get_sheets()
+    sh = sp.worksheet(SHEET_FOROSH)
+    rows = sh.get_all_values()
+    today = jdatetime.date.today().strftime("%Y/%m/%d")
+    for i, row in enumerate(rows[1:], start=2):
+        if (row and row[0].strip() == name.strip() and
+                str(row[1]).strip() == str(count).strip() and
+                today in str(row[2])):
+            sh.delete_rows(i)
+            return True
+    for i, row in enumerate(rows[1:], start=2):
+        if row and row[0].strip() == name.strip() and str(row[1]).strip() == str(count).strip():
+            sh.delete_rows(i)
+            return True
+    return False
+
 def add_expense(label, amount):
     sp = get_sheets()
     sh = sp.worksheet(SHEET_HAZINE)
@@ -175,15 +192,21 @@ def get_report(period="روزانه"):
     lines.append(f"{emoji} *سود خالص: {fp(net)} تومان*")
     return "\n".join(lines)
 
-def parse_msg(text):
+def parse_single(text):
     text = text.strip()
     if "گزارش روزانه" in text: return ("report", "روزانه")
     if "گزارش هفتگی" in text: return ("report", "هفتگی")
     if "گزارش ماهانه" in text: return ("report", "ماهانه")
+    # حذف فروش (مرجوعی)
+    m = re.match(r'^حذف\s+(.+?)\s+(\d+)$', text)
+    if m: return ("delete_sale", m.group(1).strip(), int(m.group(2)))
+    # تغییر قیمت
     m = re.match(r'^قیمت\s+(.+?)\s+([\d,]+)$', text)
     if m: return ("update_price", m.group(1).strip(), int(m.group(2).replace(',', '')))
+    # فروش
     m = re.match(r'^فروش\s+(.+?)\s+(\d+)\s*عدد\s+([\d,]+)$', text)
     if m: return ("sale", m.group(1).strip(), int(m.group(2)), int(m.group(3).replace(',', '')))
+    # هزینه یا کالا
     m = re.match(r'^(.+?)\s+([\d,]+)$', text)
     if m:
         label = m.group(1).strip()
@@ -194,6 +217,50 @@ def parse_msg(text):
         return ("item", label, amount)
     return ("unknown",)
 
+def parse_msg(text):
+    # اگه چند دستور با - جدا شده بود
+    if " - " in text or "\n" in text:
+        parts = re.split(r' - |\n', text)
+        parts = [p.strip() for p in parts if p.strip()]
+        if len(parts) > 1:
+            return [parse_single(p) for p in parts]
+    return [parse_single(text)]
+
+async def process_action(result, update):
+    action = result[0]
+    if action == "item":
+        name, price = result[1], result[2]
+        status, old = add_or_update_item(name, price)
+        if status == "new":
+            return f"✅ *کالای جدید ثبت شد*\n📦 {name}\n💰 {fp(price)} تومان"
+        else:
+            return f"✅ *قیمت بروزرسانی شد*\n📦 {name}\n💰 {fp(price)} تومان"
+    elif action == "update_price":
+        name, price = result[1], result[2]
+        add_or_update_item(name, price)
+        return f"✅ *قیمت بروزرسانی شد*\n📦 {name}\n💰 {fp(price)} تومان"
+    elif action == "sale":
+        name, count, sell_price = result[1], result[2], result[3]
+        buy_price, profit = add_sale(name, count, sell_price)
+        return (f"✅ *فروش ثبت شد*\n📦 {name}\n🔢 {count} عدد\n"
+                f"💰 خرید: {fp(buy_price)} | فروش: {fp(sell_price)}\n"
+                f"📈 سود: {fp(profit)} تومان")
+    elif action == "delete_sale":
+        name, count = result[1], result[2]
+        ok = delete_sale(name, count)
+        if ok:
+            return f"🗑️ *فروش حذف شد*\n📦 {name} - {count} عدد"
+        else:
+            return f"❌ فروش *{name}* با تعداد {count} پیدا نشد."
+    elif action == "expense":
+        label, amount = result[1], result[2]
+        add_expense(label, amount)
+        return f"✅ *هزینه ثبت شد*\n📝 {label}\n💸 {fp(amount)} تومان"
+    elif action == "report":
+        return get_report(result[1])
+    else:
+        return None
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != AUTHORIZED_USER_ID:
         await update.message.reply_text("⛔ دسترسی ندارید.")
@@ -201,43 +268,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if not text: return
     try:
-        result = parse_msg(text)
-        action = result[0]
-        if action == "item":
-            name, price = result[1], result[2]
-            status, old = add_or_update_item(name, price)
-            if status == "new":
-                msg = f"✅ *کالای جدید ثبت شد*\n📦 {name}\n💰 قیمت خرید: {fp(price)} تومان"
-            else:
-                msg = f"✅ *قیمت بروزرسانی شد*\n📦 {name}\n💰 قیمت جدید: {fp(price)} تومان"
-            await update.message.reply_text(msg, parse_mode='Markdown')
-        elif action == "update_price":
-            name, price = result[1], result[2]
-            add_or_update_item(name, price)
-            await update.message.reply_text(f"✅ *قیمت بروزرسانی شد*\n📦 {name}\n💰 {fp(price)} تومان", parse_mode='Markdown')
-        elif action == "sale":
-            name, count, sell_price = result[1], result[2], result[3]
-            buy_price, profit = add_sale(name, count, sell_price)
-            msg = (f"✅ *فروش ثبت شد*\n📦 {name}\n🔢 {count} عدد\n"
-                   f"💰 خرید: {fp(buy_price)} | فروش: {fp(sell_price)}\n"
-                   f"📈 سود: {fp(profit)} تومان")
-            await update.message.reply_text(msg, parse_mode='Markdown')
-        elif action == "expense":
-            label, amount = result[1], result[2]
-            add_expense(label, amount)
-            await update.message.reply_text(f"✅ *هزینه ثبت شد*\n📝 {label}\n💸 {fp(amount)} تومان", parse_mode='Markdown')
-        elif action == "report":
+        actions = parse_msg(text)
+        # اگه گزارش بود اول اعلام کن
+        if any(a[0] == "report" for a in actions):
             await update.message.reply_text("⏳ در حال تهیه گزارش...")
-            report = get_report(result[1])
-            await update.message.reply_text(report, parse_mode='Markdown')
+        results = []
+        for action in actions:
+            if action[0] == "unknown":
+                continue
+            msg = await process_action(action, update)
+            if msg:
+                results.append(msg)
+        if results:
+            await update.message.reply_text("\n\n".join(results), parse_mode='Markdown')
         else:
             help_text = (
                 "❓ *راهنما:*\n\n"
                 "📦 ثبت کالا: `دریل 2500000`\n"
                 "✏️ تغییر قیمت: `قیمت دریل 2800000`\n"
                 "🛒 ثبت فروش: `فروش دریل 2 عدد 3500000`\n"
+                "🗑️ حذف فروش: `حذف قفل آویز 20`\n"
                 "💸 ثبت هزینه: `کرایه بار 500000`\n"
-                "📊 گزارش: `گزارش روزانه` | `گزارش هفتگی` | `گزارش ماهانه`"
+                "📊 گزارش: `گزارش روزانه` | `گزارش هفتگی` | `گزارش ماهانه`\n\n"
+                "📌 *چند فروش با هم:*\n"
+                "`فروش قفل 1 عدد 200000 - فروش مته 2 عدد 50000`"
             )
             await update.message.reply_text(help_text, parse_mode='Markdown')
     except Exception as e:
