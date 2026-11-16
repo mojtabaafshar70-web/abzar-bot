@@ -23,12 +23,12 @@
 <header id="app-header">ابزارآلات مجتبی</header>
 
 <div id="app">
-    <div class="card center"><h3>در حال بارگذاری...</h3></div>
+    <div class="card"><h3 class="center">در حال بارگذاری...</h3></div>
 </div>
 
 <script>
     if (typeof window.supabase === 'undefined') {
-        document.getElementById('app').innerHTML = `<div class="card err">کتابخانه Supabase لود نشد. اینترنت یا VPN را بررسی کنید.</div>`;
+        document.getElementById('app').innerHTML = `<div class="card err">کتابخانه Supabase لود نشد.</div>`;
     } else {
         const SUPABASE_URL = 'https://ickkglmeyhzoibskonxz.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_n5G5KAAIgzSdz9A8S1IsDg_lmzIkq1f'; 
@@ -61,7 +61,6 @@
                     <div class="card">
                         <h2>${S.view === 'admin' ? 'پنل مدیریت' : 'پنل مشتری'}</h2>
                         <p class="center" style="color:var(--gn)">شما با موفقیت وارد شدید.</p>
-                        <p class="center">در حال ساخت محیط...</p>
                         <button onclick="doLogout()" style="background:var(--rd)">خروج</button>
                     </div>`;
             }
@@ -83,53 +82,46 @@
             const user = document.getElementById('auth_user').value;
             const pass = document.getElementById('auth_pass').value;
             const btn = document.getElementById('btn_login');
-            const errBox = document.getElementById('login_err');
             
-            if (!user || !pass) return showError('لطفا نام کاربری و رمز را وارد کنید');
+            if (!user || !pass) return showError('لطفا اطلاعات را کامل وارد کنید');
 
             btn.textContent = 'در حال بررسی...';
             btn.disabled = true;
-            errBox.classList.add('hidden');
+            document.getElementById('login_err').classList.add('hidden');
 
             try {
+                // تبدیل شماره موبایل به ایمیل
                 let email = user;
                 if (/^09\d{9}$/.test(user)) email = user + '@mojtaba.com';
 
                 // ۱. تلاش برای ورود
-                let { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-                    email: email, password: pass
-                });
+                let { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
 
-                // ۲. اگر کاربر نبود، ثبت‌نام کن
-                if (authError && authError.message.includes('Invalid login credentials')) {
-                    btn.textContent = 'در حال ثبت‌نام...';
-                    let { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-                        email: email, password: pass
-                    });
+                // ۲. اگر لاگین نشد، ثبت‌نام خودکار
+                if (error && error.message.includes('Invalid login credentials')) {
+                    let { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password: pass });
+                    if (signUpError) throw new Error('ثبت‌نام: ' + signUpError.message);
                     
-                    if (signUpError) throw new Error('خطا در ثبت‌نام: ' + signUpError.message);
-                    
-                    // ذخیره در جدول مشتریان
-                    const { error: insertError } = await supabase.from('customers').insert([{
+                    // ذخیره در دیتابیس
+                    await supabase.from('customers').insert([{
                         auth_id: signUpData.user.id,
                         name: user,
                         phone: user,
                         role: (S.role === 'admin' && user === '09120000000') ? 'admin' : 'customer'
                     }]);
                     
-                    if (insertError) throw new Error('خطا در ذخیره پروفایل: ' + insertError.message);
-                    
-                    authData = signUpData;
-                } else if (authError) {
-                    throw new Error('خطای ورود: ' + authError.message);
+                    data = signUpData;
+                } else if (error) {
+                    throw new Error('ورود: ' + error.message);
                 }
 
-                S.user = authData.user;
+                // هدایت به پنل
+                S.user = data.user;
                 S.view = (S.role === 'admin') ? 'admin' : 'customer';
                 draw();
 
-            } catch (error) {
-                showError(error.message);
+            } catch (err) {
+                showError(err.message); // نمایش خطا روی صفحه
                 btn.textContent = 'ورود';
                 btn.disabled = false;
             }
