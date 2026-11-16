@@ -4,18 +4,18 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
     <title>ابزارآلات مجتبی</title>
-    <!-- اتصال به Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root{--bg:#ece4d2;--card:#f8f2e3;--tx:#2a2216;--pr:#0f5e63;--neon:#00f0d0;--bd:#d2c3a1;--rd:#b3261e;--gn:#1b7a46}
-        *{box-sizing:border-box} body{margin:0; background:var(--bg); color:var(--tx); font:15px/1.7 Tahoma, sans-serif; padding:20px; padding-bottom:50px}
+        *{box-sizing:border-box} body{margin:0; background:var(--bg); color:var(--tx); font:15px/1.7 Tahoma, sans-serif; padding:20px}
         header{background:var(--pr); color:white; padding:15px; text-align:center; font-weight:bold; border-bottom:4px solid var(--neon); border-radius:8px; margin-bottom:15px}
         .card{background:var(--card); border:1px solid var(--bd); border-top:4px solid var(--neon); border-radius:10px; padding:20px; margin:0 auto 15px; max-width:500px; box-shadow:0 4px 10px rgba(0,0,0,0.1)}
         h2,h3{color:var(--pr); margin-top:0; text-align:center}
         input{width:100%; padding:12px; margin:8px 0; border:1px solid var(--bd); border-radius:8px; font-family:inherit; font-size:15px}
         button{width:100%; padding:14px; margin:8px 0; border:none; border-radius:8px; background:var(--pr); color:#fff; font-family:inherit; font-size:16px; cursor:pointer; font-weight:bold}
         button.sec{background:#b8893a} 
-        .err{color:var(--rd); text-align:center; font-weight:bold; margin-top:10px}
+        .err{color:var(--rd); text-align:center; font-weight:bold; margin-top:10px; background:#ffebee; padding:10px; border-radius:8px; border:1px solid var(--rd)}
+        .hidden{display:none !important}
     </style>
 </head>
 <body>
@@ -27,17 +27,9 @@
 </div>
 
 <script>
-    // بررسی می‌کنیم آیا کتابخانه Supabase لود شده یا نه
     if (typeof window.supabase === 'undefined') {
-        document.getElementById('app').innerHTML = `
-            <div class="card">
-                <h3>خطای اتصال!</h3>
-                <p class="err">کتابخانه Supabase لود نشد.</p>
-                <p class="center">لطفاً اینترنت خود را بررسی کنید یا VPN/فیلترشکن را خاموش/روشن کنید و صفحه را رفرش کنید.</p>
-            </div>
-        `;
+        document.getElementById('app').innerHTML = `<div class="card err">کتابخانه Supabase لود نشد. اینترنت یا VPN را بررسی کنید.</div>`;
     } else {
-        // تنظیمات اتصال به Supabase
         const SUPABASE_URL = 'https://ickkglmeyhzoibskonxz.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_n5G5KAAIgzSdz9A8S1IsDg_lmzIkq1f'; 
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -53,8 +45,7 @@
                         <p class="center">برای ادامه نوع ورود خود را انتخاب کنید.</p>
                         <button onclick="openAuth('admin')">ورود به پنل مدیریت</button>
                         <button class="sec" onclick="openAuth('customer')">ورود به پنل مشتری</button>
-                    </div>
-                `;
+                    </div>`;
             } else if (S.view === 'auth') {
                 app.innerHTML = `
                     <div class="card">
@@ -63,19 +54,23 @@
                         <input id="auth_pass" placeholder="رمز عبور" type="password">
                         <button id="btn_login" onclick="doLogin()">ورود</button>
                         <button class="sec" onclick="S.view='choice'; draw()">بازگشت</button>
-                        <div id="login_err" class="err"></div>
-                    </div>
-                `;
+                        <div id="login_err" class="err hidden"></div>
+                    </div>`;
             } else if (S.view === 'admin' || S.view === 'customer') {
                 app.innerHTML = `
                     <div class="card">
                         <h2>${S.view === 'admin' ? 'پنل مدیریت' : 'پنل مشتری'}</h2>
                         <p class="center" style="color:var(--gn)">شما با موفقیت وارد شدید.</p>
-                        <p class="center">مرحله بعد: تکمیل سیستم</p>
+                        <p class="center">در حال ساخت محیط...</p>
                         <button onclick="doLogout()" style="background:var(--rd)">خروج</button>
-                    </div>
-                `;
+                    </div>`;
             }
+        }
+
+        function showError(msg) {
+            const errBox = document.getElementById('login_err');
+            errBox.textContent = msg;
+            errBox.classList.remove('hidden');
         }
 
         function openAuth(role) {
@@ -90,41 +85,43 @@
             const btn = document.getElementById('btn_login');
             const errBox = document.getElementById('login_err');
             
-            if (!user || !pass) {
-                errBox.textContent = 'لطفا شماره و رمز را وارد کنید';
-                return;
-            }
+            if (!user || !pass) return showError('لطفا نام کاربری و رمز را وارد کنید');
 
             btn.textContent = 'در حال بررسی...';
             btn.disabled = true;
-            errBox.textContent = '';
+            errBox.classList.add('hidden');
 
             try {
                 let email = user;
                 if (/^09\d{9}$/.test(user)) email = user + '@mojtaba.com';
 
+                // ۱. تلاش برای ورود
                 let { data: authData, error: authError } = await supabase.auth.signInWithPassword({
                     email: email, password: pass
                 });
 
+                // ۲. اگر کاربر نبود، ثبت‌نام کن
                 if (authError && authError.message.includes('Invalid login credentials')) {
-                    // اگر کاربر نبود، ثبت‌نام کن
+                    btn.textContent = 'در حال ثبت‌نام...';
                     let { data: signUpData, error: signUpError } = await supabase.auth.signUp({
                         email: email, password: pass
                     });
-                    if (signUpError) throw signUpError;
                     
-                    // ثبت اطلاعات در جدول مشتریان
-                    await supabase.from('customers').insert([{
+                    if (signUpError) throw new Error('خطا در ثبت‌نام: ' + signUpError.message);
+                    
+                    // ذخیره در جدول مشتریان
+                    const { error: insertError } = await supabase.from('customers').insert([{
                         auth_id: signUpData.user.id,
                         name: user,
                         phone: user,
                         role: (S.role === 'admin' && user === '09120000000') ? 'admin' : 'customer'
                     }]);
                     
+                    if (insertError) throw new Error('خطا در ذخیره پروفایل: ' + insertError.message);
+                    
                     authData = signUpData;
                 } else if (authError) {
-                    throw authError;
+                    throw new Error('خطای ورود: ' + authError.message);
                 }
 
                 S.user = authData.user;
@@ -132,7 +129,7 @@
                 draw();
 
             } catch (error) {
-                errBox.textContent = error.message;
+                showError(error.message);
                 btn.textContent = 'ورود';
                 btn.disabled = false;
             }
