@@ -4,7 +4,6 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
     <title>ابزارآلات مجتبی</title>
-    <!-- این خط اضافه شده تا خطاهای احتمالی رو صفحه نشون بده -->
     <script>window.onerror = function(msg) { document.body.innerHTML = '<div style="color:red;padding:20px;font-size:20px">خطای برنامه: ' + msg + '</div>'; };</script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -14,8 +13,8 @@
         h3{color:#0f5e63; text-align:center}
         input{width:100%; padding:12px; margin:8px 0; border:1px solid #d2c3a1; border-radius:8px; font-family:inherit;}
         button{width:100%; padding:14px; margin:8px 0; border:none; border-radius:8px; background:#0f5e63; color:#fff; font-family:inherit; font-size:16px; cursor:pointer;}
-        button.sec{background:#b8893a} 
         .err{color:#b3261e; text-align:center; font-weight:bold; margin-top:10px; background:#ffebee; padding:10px; border-radius:8px;}
+        .ok{color:#1b7a46; text-align:center; font-weight:bold; margin-top:10px; background:#e8f5e9; padding:10px; border-radius:8px;}
     </style>
 </head>
 <body>
@@ -30,36 +29,55 @@
     setTimeout(() => {
         try {
             if (typeof window.supabase === 'undefined') {
-                document.getElementById('app').innerHTML = '<div class="card err">اینترنت گوشی شما اجازه لود شدن Supabase را نمیدهد (VPN یا فیلترشکن را روشن/خاموش کنید).</div>';
+                document.getElementById('app').innerHTML = '<div class="card err">اینترنت گوشی شما اجازه لود شدن Supabase را نمیدهد.</div>';
                 return;
             }
             
             const supabase = window.supabase.createClient('https://ickkglmeyhzoibskonxz.supabase.co', 'sb_publishable_n5G5KAAIgzSdz9A8S1IsDg_lmzIkq1f');
-            let currentRole = 'admin'; // پیش‌فرض برای تست
 
             function showLogin() {
                 document.getElementById('app').innerHTML = `
                     <div class="card">
-                        <h3>ورود (تست)</h3>
+                        <h3>ورود به برنامه</h3>
                         <input id="u" placeholder="شماره موبایل" value="09120000000">
                         <input id="p" placeholder="رمز" type="password" value="123456">
-                        <button onclick="login()">ورود به برنامه</button>
+                        <button onclick="login()">ورود / ثبت‌نام</button>
+                        <div id="msg"></div>
                     </div>`;
             }
 
             window.login = async function() {
                 const user = document.getElementById('u').value;
                 const pass = document.getElementById('p').value;
+                const msgBox = document.getElementById('msg');
                 const btn = event.target;
-                btn.innerText = "در حال ارسال...";
+                
+                btn.innerText = "در حال بررسی...";
+                msgBox.innerHTML = '';
                 
                 let email = user + '@mojtaba.com';
+
+                // ۱. تلاش برای ورود
                 let { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
                 
-                if (error) {
-                    btn.innerText = "خطا: " + error.message;
+                // ۲. اگر کاربر وجود نداشت، ثبت‌نام میکنیم
+                if (error && error.message.includes('Invalid login credentials')) {
+                    btn.innerText = "در حال ساخت حساب...";
+                    let { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password: pass });
+                    
+                    if (signUpError) {
+                        msgBox.innerHTML = '<div class="err">خطا در ثبت‌نام: ' + signUpError.message + '</div>';
+                        btn.innerText = "ورود / ثبت‌نام";
+                    } else {
+                        msgBox.innerHTML = '<div class="ok">حساب ساخته شد! خوش آمدید.</div>';
+                        btn.innerText = "ورود موفق";
+                    }
+                } else if (error) {
+                    msgBox.innerHTML = '<div class="err">خطای ورود: ' + error.message + '</div>';
+                    btn.innerText = "ورود / ثبت‌نام";
                 } else {
-                    document.getElementById('app').innerHTML = `<div class="card"><h3 style="color:green">ورود موفق بود!</h3></div>`;
+                    msgBox.innerHTML = '<div class="ok">ورود موفق!</div>';
+                    btn.innerText = "ورود موفق";
                 }
             };
 
@@ -67,7 +85,7 @@
         } catch (e) {
             document.getElementById('app').innerHTML = '<div class="card err">خطای جاوا اسکریپت: ' + e.message + '</div>';
         }
-    }, 1000); // ۱ ثانیه صبر میکنه تا کتابخانه لود بشه
+    }, 1000);
 </script>
 </body>
 </html>
