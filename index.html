@@ -3,89 +3,253 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-    <title>ابزارآلات مجتبی</title>
-    <script>window.onerror = function(msg) { document.body.innerHTML = '<div style="color:red;padding:20px;font-size:20px">خطای برنامه: ' + msg + '</div>'; };</script>
+    <meta name="theme-color" content="#0f5e63">
+    <title>ابزارآلات مجتبی | اهورا</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body{margin:0; background:#ece4d2; color:#2a2216; font:15px/1.7 Tahoma, sans-serif; padding:20px}
-        header{background:#0f5e63; color:white; padding:15px; text-align:center; font-weight:bold; border-bottom:4px solid #00f0d0; border-radius:8px; margin-bottom:15px}
-        .card{background:#f8f2e3; border:1px solid #d2c3a1; border-top:4px solid #00f0d0; border-radius:10px; padding:20px; margin:0 auto 15px; max-width:500px;}
-        h3{color:#0f5e63; text-align:center}
-        input{width:100%; padding:12px; margin:8px 0; border:1px solid #d2c3a1; border-radius:8px; font-family:inherit;}
-        button{width:100%; padding:14px; margin:8px 0; border:none; border-radius:8px; background:#0f5e63; color:#fff; font-family:inherit; font-size:16px; cursor:pointer;}
-        .err{color:#b3261e; text-align:center; font-weight:bold; margin-top:10px; background:#ffebee; padding:10px; border-radius:8px;}
-        .ok{color:#1b7a46; text-align:center; font-weight:bold; margin-top:10px; background:#e8f5e9; padding:10px; border-radius:8px;}
+        :root{
+            --bg:#0d1117; --card:#161b22; --tx:#e6edf3; --mu:#8b949e; 
+            --pr:#00f0d0; --c:#0f6a70; --bd:#30363d; --rd:#ff7b72; --gn:#3fb950;
+            --glow: 0 0 10px rgba(0,240,208,0.4), inset 0 0 10px rgba(0,240,208,0.1);
+            --fr:repeating-linear-gradient(90deg,rgba(0,240,208,.4) 0 2px,transparent 2px 6px,rgba(0,240,208,.2) 6px 8px,transparent 8px 14px);
+        }
+        *{box-sizing:border-box; font-family: Tahoma, sans-serif;}
+        body{margin:0; background:var(--bg); color:var(--tx); font-size:15px; line-height:1.7; padding-bottom:20px;
+             background-image: radial-gradient(circle at 50% 0%, rgba(0,240,208,0.05) 0%, transparent 50%);}
+        
+        /* هدر نئونی با طرح تخت جمشید */
+        header{position:relative; background:linear-gradient(180deg, #1a252f, var(--card)); color:#fff; padding:15px 20px; 
+               border-bottom:3px solid var(--pr); display:flex; justify-content:space-between; align-items:center;
+               box-shadow: 0 4px 15px rgba(0,240,208,0.2);}
+        header::after{content:''; position:absolute; inset-inline:0; bottom:-6px; height:6px; background:var(--fr);}
+        
+        .app-title{font-size:18px; font-weight:bold; text-shadow:0 0 8px rgba(0,240,208,0.6);}
+        
+        main{padding:20px 15px; max-width:600px; margin:auto;}
+        
+        .card{background:var(--card); border:1px solid var(--bd); border-top:3px solid var(--pr); 
+              border-radius:12px; padding:20px; margin-bottom:20px; box-shadow: var(--glow);}
+        
+        h2, h3 {text-align:center; color:var(--pr); margin-top:0; text-shadow:0 0 8px rgba(0,240,208,0.5);}
+        
+        input, select {width:100%; padding:12px; margin:8px 0; background:#0d1117; border:1px solid var(--bd); 
+                       border-radius:8px; color:var(--tx); font-size:15px; transition:0.3s;}
+        input:focus {outline:none; border-color:var(--pr); box-shadow:0 0 8px rgba(0,240,208,0.3);}
+        
+        button {width:100%; padding:14px; margin:10px 0; border:none; border-radius:8px; 
+                background:var(--c); color:#fff; font-size:16px; font-weight:bold; cursor:pointer; transition:0.3s;}
+        button:hover {background:var(--pr); color:#000; box-shadow:0 0 15px var(--pr);}
+        
+        button.sec {background:transparent; border:1px solid var(--pr); color:var(--pr);}
+        button.sec:hover {background:rgba(0,240,208,0.1); box-shadow:none;}
+        
+        .msg {padding:10px; border-radius:8px; text-align:center; margin-top:10px; display:none;}
+        .msg.err {display:block; background:rgba(255,123,114,0.1); border:1px solid var(--rd); color:var(--rd);}
+        .msg.ok {display:block; background:rgba(63,185,80,0.1); border:1px solid var(--gn); color:var(--gn);}
+        
+        .modal {position:fixed; inset:0; background:rgba(0,0,0,0.8); display:flex; align-items:center; justify-content:center; padding:20px; z-index:100;}
+        .modal .card {max-width:400px; width:100%; text-align:center;}
+        
+        .hidden {display:none !important;}
+        .center {text-align:center;}
+        
+        /* استایل تب ها */
+        .tabs {display:flex; gap:5px; margin-bottom:15px; background:var(--card); padding:5px; border-radius:10px; border:1px solid var(--bd);}
+        .tabs button {margin:0; padding:10px 5px; font-size:13px; border-radius:8px; background:transparent; color:var(--mu); box-shadow:none;}
+        .tabs button.active {background:var(--c); color:#fff; box-shadow:0 0 10px rgba(0,240,208,0.3);}
     </style>
 </head>
 <body>
 
-<header>ابزارآلات مجتبی</header>
+<!-- مودال خوش‌آمدگویی -->
+<div id="welcome-modal" class="modal">
+    <div class="card">
+        <h2 style="font-size:24px; margin-bottom:20px;">پخش قفل و یراق اهورا</h2>
+        <p style="color:var(--mu); font-size:16px; line-height:2;">از اعتماد و همراهی شما سپاسگزاریم؛<br>امید است این خرید آغاز ارتباطی طولانی‌مدت باشد.</p>
+        <button onclick="closeWelcome()" style="margin-top:20px;">ادامه</button>
+    </div>
+</div>
 
-<div id="app">
-    <div class="card"><h3>در حال اتصال...</h3></div>
+<div id="app" class="hidden">
+    <header id="main-header">
+        <div class="app-title">ابزارآلات اهورا</div>
+        <div id="header-user" style="font-size:12px; color:var(--mu);"></div>
+    </header>
+    
+    <main id="main-content">
+        <!-- محتوا توسط جاوا اسکریپت لود می‌شود -->
+    </main>
 </div>
 
 <script>
-    setTimeout(() => {
+    // تنظیمات Supabase
+    const SUPABASE_URL = 'https://ickkglmeyhzoibskonxz.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_n5G5KAAIgzSdz9A8S1IsDg_lmzIkq1f'; 
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // وضعیت برنامه
+    const S = {
+        view: 'choice', // choice, login, register, admin, customer
+        role: null,
+        user: null,
+        tab: ''
+    };
+
+    // بستن مودال خوش‌آمدگویی
+    function closeWelcome() {
+        document.getElementById('welcome-modal').classList.add('hidden');
+        document.getElementById('app').classList.remove('hidden');
+        initAuth();
+    }
+
+    // رندر کردن صفحات
+    function render() {
+        const main = document.getElementById('main-content');
+        const headerUser = document.getElementById('header-user');
+        
+        if (S.view === 'choice') {
+            headerUser.innerHTML = '';
+            main.innerHTML = `
+                <div class="card center">
+                    <h2>خوش آمدید</h2>
+                    <p style="color:var(--mu); margin-bottom:20px;">برای ادامه نوع ورود خود را انتخاب کنید.</p>
+                    <button onclick="openLogin('admin')">ورود / ثبت‌نام مدیر</button>
+                    <button class="sec" onclick="openLogin('customer')">ورود / ثبت‌نام مشتری</button>
+                </div>
+            `;
+        } 
+        else if (S.view === 'login') {
+            main.innerHTML = `
+                <div class="card">
+                    <h2>${S.role === 'admin' ? 'مدیر' : 'مشتری'}</h2>
+                    <input id="username" placeholder="نام کاربری (شماره موبایل)" type="tel">
+                    <input id="password" placeholder="رمز عبور" type="password">
+                    <button onclick="doLogin()" id="btn-login">ورود</button>
+                    <div id="login-msg" class="msg"></div>
+                    <button class="sec" onclick="S.view='choice'; render()" style="margin-top:15px;">بازگشت</button>
+                </div>
+            `;
+        }
+        else if (S.view === 'admin' || S.view === 'customer') {
+            headerUser.innerHTML = `${S.user.name || S.user.phone} | <a href="#" onclick="doLogout()" style="color:var(--rd); text-decoration:none;">خروج</a>`;
+            main.innerHTML = `
+                <div class="card center">
+                    <h2>پنل ${S.view === 'admin' ? 'مدیریت' : 'مشتری'}</h2>
+                    <p style="color:var(--gn)">شما با موفقیت وارد شدید.</p>
+                    <p style="color:var(--mu)">(بخش‌های بعدی در حال ساخت هستند...)</p>
+                    <button onclick="doLogout()" style="background:var(--rd); margin-top:20px;">خروج از حساب</button>
+                </div>
+            `;
+        }
+    }
+
+    // باز کردن صفحه لاگین
+    function openLogin(role) {
+        S.role = role;
+        S.view = 'login';
+        render();
+    }
+
+    // عملیات ورود / ثبت‌نام
+    async function doLogin() {
+        const user = document.getElementById('username').value.trim();
+        const pass = document.getElementById('password').value;
+        const btn = document.getElementById('btn-login');
+        const msg = document.getElementById('login-msg');
+        
+        if (!user || !pass) { showMsg(msg, 'لطفا اطلاعات را کامل وارد کنید', 'err'); return; }
+        if (pass.length < 6) { showMsg(msg, 'رمز عبور باید حداقل ۶ کاراکتر باشد', 'err'); return; }
+
+        btn.innerText = 'در حال بررسی...';
+        btn.disabled = true;
+        msg.className = 'msg';
+
         try {
-            if (typeof window.supabase === 'undefined') {
-                document.getElementById('app').innerHTML = '<div class="card err">اینترنت گوشی شما اجازه لود شدن Supabase را نمیدهد.</div>';
-                return;
+            let email = user.includes('@') ? user : user + '@ahoura.com';
+            
+            // ۱. تلاش برای ورود
+            let { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password: pass });
+
+            // ۲. اگر کاربر نبود، ثبت‌نام خودکار
+            if (authError && authError.message.includes('Invalid login credentials')) {
+                btn.innerText = 'در حال ثبت‌نام...';
+                let { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password: pass });
+                
+                if (signUpError) throw new Error(signUpError.message);
+                
+                // ذخیره در دیتابیس
+                await supabase.from('customers').insert([{
+                    auth_id: signUpData.user.id,
+                    username: user,
+                    phone: user,
+                    role: (S.role === 'admin' && user === '09120000000') ? 'admin' : 'customer',
+                    name: user
+                }]);
+                
+                authData = signUpData;
+                showMsg(msg, 'حساب شما ساخته شد و وارد شدید.', 'ok');
+            } else if (authError) {
+                throw new Error(authError.message);
+            }
+
+            // ۳. دریافت پروفایل
+            S.user = authData.user;
+            const { data: profile } = await supabase.from('customers').select('*').eq('auth_id', S.user.id).single();
+            
+            if (profile) {
+                S.user = { ...S.user, ...profile };
+                S.role = profile.role;
+            } else {
+                S.role = (S.role === 'admin') ? 'admin' : 'customer';
             }
             
-            const supabase = window.supabase.createClient('https://ickkglmeyhzoibskonxz.supabase.co', 'sb_publishable_n5G5KAAIgzSdz9A8S1IsDg_lmzIkq1f');
+            // هدایت به پنل
+            S.view = (S.role === 'admin') ? 'admin' : 'customer';
+            render();
 
-            function showLogin() {
-                document.getElementById('app').innerHTML = `
-                    <div class="card">
-                        <h3>ورود به برنامه</h3>
-                        <input id="u" placeholder="شماره موبایل" value="09120000000">
-                        <input id="p" placeholder="رمز" type="password" value="123456">
-                        <button onclick="login()">ورود / ثبت‌نام</button>
-                        <div id="msg"></div>
-                    </div>`;
-            }
-
-            window.login = async function() {
-                const user = document.getElementById('u').value;
-                const pass = document.getElementById('p').value;
-                const msgBox = document.getElementById('msg');
-                const btn = event.target;
-                
-                btn.innerText = "در حال بررسی...";
-                msgBox.innerHTML = '';
-                
-                let email = user + '@mojtaba.com';
-
-                // ۱. تلاش برای ورود
-                let { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
-                
-                // ۲. اگر کاربر وجود نداشت، ثبت‌نام میکنیم
-                if (error && error.message.includes('Invalid login credentials')) {
-                    btn.innerText = "در حال ساخت حساب...";
-                    let { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password: pass });
-                    
-                    if (signUpError) {
-                        msgBox.innerHTML = '<div class="err">خطا در ثبت‌نام: ' + signUpError.message + '</div>';
-                        btn.innerText = "ورود / ثبت‌نام";
-                    } else {
-                        msgBox.innerHTML = '<div class="ok">حساب ساخته شد! خوش آمدید.</div>';
-                        btn.innerText = "ورود موفق";
-                    }
-                } else if (error) {
-                    msgBox.innerHTML = '<div class="err">خطای ورود: ' + error.message + '</div>';
-                    btn.innerText = "ورود / ثبت‌نام";
-                } else {
-                    msgBox.innerHTML = '<div class="ok">ورود موفق!</div>';
-                    btn.innerText = "ورود موفق";
-                }
-            };
-
-            showLogin();
-        } catch (e) {
-            document.getElementById('app').innerHTML = '<div class="card err">خطای جاوا اسکریپت: ' + e.message + '</div>';
+        } catch (err) {
+            showMsg(msg, 'خطا: ' + err.message, 'err');
+            btn.innerText = 'ورود';
+            btn.disabled = false;
         }
-    }, 1000);
+    }
+
+    // خروج
+    async function doLogout() {
+        await supabase.auth.signOut();
+        S.view = 'choice';
+        S.user = null;
+        render();
+    }
+
+    // نمایش پیام
+    function showMsg(el, text, type) {
+        el.innerText = text;
+        el.className = 'msg ' + type;
+    }
+
+    // بررسی وضعیت ورود در زمان باز شدن
+    async function initAuth() {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+            S.user = session.user;
+            const { data: profile } = await supabase.from('customers').select('*').eq('auth_id', S.user.id).single();
+            if (profile) {
+                S.user = { ...S.user, ...profile };
+                S.role = profile.role;
+                S.view = (S.role === 'admin') ? 'admin' : 'customer';
+            } else {
+                S.view = 'choice';
+            }
+        } else {
+            S.view = 'choice';
+        }
+        render();
+    }
+
+    // شروع
+    render();
+
 </script>
 </body>
 </html>
