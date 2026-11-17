@@ -17,7 +17,6 @@
         body{margin:0; background:var(--bg); color:var(--tx); font-size:15px; line-height:1.7; padding-bottom:20px;
              background-image: radial-gradient(circle at 50% 0%, rgba(0,240,208,0.05) 0%, transparent 50%);}
         
-        /* هدر نئونی با طرح تخت جمشید */
         header{position:relative; background:linear-gradient(180deg, #1a252f, var(--card)); color:#fff; padding:15px 20px; 
                border-bottom:3px solid var(--pr); display:flex; justify-content:space-between; align-items:center;
                box-shadow: 0 4px 15px rgba(0,240,208,0.2);}
@@ -47,16 +46,11 @@
         .msg.err {display:block; background:rgba(255,123,114,0.1); border:1px solid var(--rd); color:var(--rd);}
         .msg.ok {display:block; background:rgba(63,185,80,0.1); border:1px solid var(--gn); color:var(--gn);}
         
-        .modal {position:fixed; inset:0; background:rgba(0,0,0,0.8); display:flex; align-items:center; justify-content:center; padding:20px; z-index:100;}
+        .modal {position:fixed; inset:0; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; padding:20px; z-index:100;}
         .modal .card {max-width:400px; width:100%; text-align:center;}
         
         .hidden {display:none !important;}
         .center {text-align:center;}
-        
-        /* استایل تب ها */
-        .tabs {display:flex; gap:5px; margin-bottom:15px; background:var(--card); padding:5px; border-radius:10px; border:1px solid var(--bd);}
-        .tabs button {margin:0; padding:10px 5px; font-size:13px; border-radius:8px; background:transparent; color:var(--mu); box-shadow:none;}
-        .tabs button.active {background:var(--c); color:#fff; box-shadow:0 0 10px rgba(0,240,208,0.3);}
     </style>
 </head>
 <body>
@@ -64,13 +58,13 @@
 <!-- مودال خوش‌آمدگویی -->
 <div id="welcome-modal" class="modal">
     <div class="card">
-        <h2 style="font-size:24px; margin-bottom:20px;">پخش قفل و یراق اهورا</h2>
+        <h2 style="font-size:22px; margin-bottom:20px;">پخش قفل و یراق اهورا</h2>
         <p style="color:var(--mu); font-size:16px; line-height:2;">از اعتماد و همراهی شما سپاسگزاریم؛<br>امید است این خرید آغاز ارتباطی طولانی‌مدت باشد.</p>
-        <button onclick="closeWelcome()" style="margin-top:20px;">ادامه</button>
+        <button onclick="document.getElementById('welcome-modal').style.display='none'; startApp();">ادامه</button>
     </div>
 </div>
 
-<div id="app" class="hidden">
+<div id="app" style="display:none;">
     <header id="main-header">
         <div class="app-title">ابزارآلات اهورا</div>
         <div id="header-user" style="font-size:12px; color:var(--mu);"></div>
@@ -82,27 +76,40 @@
 </div>
 
 <script>
-    // تنظیمات Supabase
     const SUPABASE_URL = 'https://ickkglmeyhzoibskonxz.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_n5G5KAAIgzSdz9A8S1IsDg_lmzIkq1f'; 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // وضعیت برنامه
-    const S = {
-        view: 'choice', // choice, login, register, admin, customer
-        role: null,
-        user: null,
-        tab: ''
-    };
+    const S = { view: 'choice', role: null, user: null };
 
-    // بستن مودال خوش‌آمدگویی
-    function closeWelcome() {
-        document.getElementById('welcome-modal').classList.add('hidden');
-        document.getElementById('app').classList.remove('hidden');
-        initAuth();
+    function startApp() {
+        document.getElementById('app').style.display = 'block';
+        checkSession();
     }
 
-    // رندر کردن صفحات
+    async function checkSession() {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                S.user = session.user;
+                const { data: profile } = await supabase.from('customers').select('*').eq('auth_id', S.user.id).single();
+                if (profile) {
+                    S.user = { ...S.user, ...profile };
+                    S.role = profile.role;
+                    S.view = (S.role === 'admin') ? 'admin' : 'customer';
+                } else {
+                    S.view = 'choice';
+                }
+            } else {
+                S.view = 'choice';
+            }
+        } catch(e) {
+            console.error(e);
+            S.view = 'choice';
+        }
+        render();
+    }
+
     function render() {
         const main = document.getElementById('main-content');
         const headerUser = document.getElementById('header-user');
@@ -112,7 +119,7 @@
             main.innerHTML = `
                 <div class="card center">
                     <h2>خوش آمدید</h2>
-                    <p style="color:var(--mu); margin-bottom:20px;">برای ادامه نوع ورود خود را انتخاب کنید.</p>
+                    <p style="color:var(--mu); margin-bottom:20px;">نوع ورود خود را انتخاب کنید</p>
                     <button onclick="openLogin('admin')">ورود / ثبت‌نام مدیر</button>
                     <button class="sec" onclick="openLogin('customer')">ورود / ثبت‌نام مشتری</button>
                 </div>
@@ -124,33 +131,31 @@
                     <h2>${S.role === 'admin' ? 'مدیر' : 'مشتری'}</h2>
                     <input id="username" placeholder="نام کاربری (شماره موبایل)" type="tel">
                     <input id="password" placeholder="رمز عبور" type="password">
-                    <button onclick="doLogin()" id="btn-login">ورود</button>
+                    <button onclick="doLogin()" id="btn-login">ورود / ثبت‌نام خودکار</button>
                     <div id="login-msg" class="msg"></div>
                     <button class="sec" onclick="S.view='choice'; render()" style="margin-top:15px;">بازگشت</button>
                 </div>
             `;
         }
         else if (S.view === 'admin' || S.view === 'customer') {
-            headerUser.innerHTML = `${S.user.name || S.user.phone} | <a href="#" onclick="doLogout()" style="color:var(--rd); text-decoration:none;">خروج</a>`;
+            headerUser.innerHTML = `${S.user.name || S.user.phone} | <a href="#" onclick="doLogout(event)" style="color:var(--rd); text-decoration:none;">خروج</a>`;
             main.innerHTML = `
                 <div class="card center">
                     <h2>پنل ${S.view === 'admin' ? 'مدیریت' : 'مشتری'}</h2>
                     <p style="color:var(--gn)">شما با موفقیت وارد شدید.</p>
                     <p style="color:var(--mu)">(بخش‌های بعدی در حال ساخت هستند...)</p>
-                    <button onclick="doLogout()" style="background:var(--rd); margin-top:20px;">خروج از حساب</button>
+                    <button onclick="doLogout(event)" style="background:var(--rd); margin-top:20px;">خروج از حساب</button>
                 </div>
             `;
         }
     }
 
-    // باز کردن صفحه لاگین
     function openLogin(role) {
         S.role = role;
         S.view = 'login';
         render();
     }
 
-    // عملیات ورود / ثبت‌نام
     async function doLogin() {
         const user = document.getElementById('username').value.trim();
         const pass = document.getElementById('password').value;
@@ -167,17 +172,14 @@
         try {
             let email = user.includes('@') ? user : user + '@ahoura.com';
             
-            // ۱. تلاش برای ورود
             let { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password: pass });
 
-            // ۲. اگر کاربر نبود، ثبت‌نام خودکار
             if (authError && authError.message.includes('Invalid login credentials')) {
                 btn.innerText = 'در حال ثبت‌نام...';
                 let { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password: pass });
                 
                 if (signUpError) throw new Error(signUpError.message);
                 
-                // ذخیره در دیتابیس
                 await supabase.from('customers').insert([{
                     auth_id: signUpData.user.id,
                     username: user,
@@ -192,7 +194,6 @@
                 throw new Error(authError.message);
             }
 
-            // ۳. دریافت پروفایل
             S.user = authData.user;
             const { data: profile } = await supabase.from('customers').select('*').eq('auth_id', S.user.id).single();
             
@@ -203,53 +204,28 @@
                 S.role = (S.role === 'admin') ? 'admin' : 'customer';
             }
             
-            // هدایت به پنل
             S.view = (S.role === 'admin') ? 'admin' : 'customer';
             render();
 
         } catch (err) {
             showMsg(msg, 'خطا: ' + err.message, 'err');
-            btn.innerText = 'ورود';
+            btn.innerText = 'ورود / ثبت‌نام خودکار';
             btn.disabled = false;
         }
     }
 
-    // خروج
-    async function doLogout() {
+    async function doLogout(e) {
+        if(e) e.preventDefault();
         await supabase.auth.signOut();
         S.view = 'choice';
         S.user = null;
         render();
     }
 
-    // نمایش پیام
     function showMsg(el, text, type) {
         el.innerText = text;
         el.className = 'msg ' + type;
     }
-
-    // بررسی وضعیت ورود در زمان باز شدن
-    async function initAuth() {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-            S.user = session.user;
-            const { data: profile } = await supabase.from('customers').select('*').eq('auth_id', S.user.id).single();
-            if (profile) {
-                S.user = { ...S.user, ...profile };
-                S.role = profile.role;
-                S.view = (S.role === 'admin') ? 'admin' : 'customer';
-            } else {
-                S.view = 'choice';
-            }
-        } else {
-            S.view = 'choice';
-        }
-        render();
-    }
-
-    // شروع
-    render();
-
 </script>
 </body>
 </html>
